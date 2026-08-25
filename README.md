@@ -41,7 +41,7 @@ to Docker Hub as `:latest` and `:<sha>` → SSH into the EC2 host and
 container restarts; postgres and frontend are untouched).
 
 **Required GitHub Secrets** (Settings → Secrets and variables → Actions) — the frontend
-repo needs the same six:
+repo needs the same five:
 
 | Secret | Value |
 |---|---|
@@ -50,11 +50,14 @@ repo needs the same six:
 | `EC2_HOST` | EC2 public IP/DNS |
 | `EC2_USER` | `ubuntu` |
 | `EC2_SSH_KEY` | full contents of the EC2 `.pem` key |
-| `PROD_DB_PASSWORD` | used by the compose file already on the EC2 host, not referenced directly by this workflow — kept here for reference |
+
+Database is managed Postgres (Supabase) — its connection string lives only in
+`~/ab-app/.env` on the EC2 host (as `DATABASE_URL`), not in any GitHub secret; this
+workflow never touches it.
 
 This workflow assumes `~/ab-app/docker-compose.yml` already exists on the EC2 host (it
-defines postgres + backend + frontend together) — see the deployment notes kept alongside
-this project for the one-time EC2 setup and that file's contents.
+defines backend + frontend together) — see the deployment notes kept alongside this
+project for the one-time EC2 setup and that file's contents.
 
 ## No login system
 No password auth — a request header (`x-user-role`) picks the role. The frontend's
