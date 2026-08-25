@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AddressLevel {
+  COUNTRY
+  STATE
+  CITY
+  PINCODE
+  AREA
+  SUBAREA
+}
+
+enum NodeStatus {
+  ACTIVE
+  PENDING
+  MERGED
+  INACTIVE
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  ACTIVATE
+  DEACTIVATE
+  MERGE
+  CORRECT
+  RELINK
+}
+
+// One generic hierarchy table: Country -> State -> City -> Pincode -> Area -> SubArea.
+// Using a single self-referencing model keeps master CRUD, matching, pending-review
+// and merge/standardisation logic identical at every level of the hierarchy.
+model AddressNode {
+  id             String       @id @default(cuid())
+  level          AddressLevel
+  name           String
+  normalizedKey  String // lower-cased, punctuation-stripped, abbreviation-expanded form used for matching
+  code           String? // ISO code (country/state) or the pincode digits itself
+  status         NodeStatus   @default(ACTIVE)
+  isUserSubmitted Boolean     @default(false)
+
+  parentId String?
+  parent   AddressNode?  @relation("NodeHierarchy", fields: [parentId], references: [id])
+  children AddressNode[] @relation("NodeHierarchy")
+
+  mergedIntoId String?
+  mergedInto   AddressNode?  @relation("NodeMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom   AddressNode[] @relation("NodeMerge")
+
+  aliases AddressAlias[]
+
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userAddressesAsCountry UserAddress[] @relation("UACountry")
+  userAddressesAsState   UserAddress[] @relation("UAState")
+  userAddressesAsCity    UserAddress[] @relation("UACity")
+  userAddressesAsPincode UserAddress[] @relation("UAPincode")
+  userAddressesAsArea    UserAddress[] @relation("UAArea")
+  userAddressesAsSubArea UserAddress[] @relation("UASubArea")
+
+  auditAsNode   AuditLog[] @relation("AuditNode")
+  auditAsTarget AuditLog[] @relation("AuditTarget")
+
+  @@unique([parentId, level, normalizedKey], name: "uniq_sibling_key")
+  @@index([level, status])
+  @@index([normalizedKey])
+}
+
+model AddressAlias {
+  id            String   @id @default(cuid())
+  nodeId        String
+  node          AddressNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  aliasText     String
+  normalizedKey String
+  createdAt     DateTime @default(now())
+
+  @@index([normalizedKey])
+  @@index([nodeId])
+}
+
+// Generic mapping row so any of AB's existing pages can attach a standardised
+// address to whatever record they own (property, lead, user profile, branch, ...)
+// without owning an independent address master of their own.
+model UserAddress {
+  id String @id @default(cuid())
+
+  entityType String // e.g. PROPERTY_LISTING, LEAD, USER_PROFILE, OFFICE_BRANCH, SITE_VISIT, INVOICE
+  entityId   String
+
+  countryId String
+  country   AddressNode @relation("UACountry", fields: [countryId], references: [id])
+  stateId   String
+  state     AddressNode @relation("UAState", fields: [stateId], references: [id])
+  cityId    String
+  city      AddressNode @relation("UACity", fields: [cityId], references: [id])
+  pincodeId String
+  pincode   AddressNode @relation("UAPincode", fields: [pincodeId], references: [id])
+  areaId    String
+  area      AddressNode @relation("UAArea", fields: [areaId], references: [id])
+  subAreaId String?
+  subArea   AddressNode? @relation("UASubArea", fields: [subAreaId], references: [id])
+
+  line1    String?
+  line2    String?
+  landmark String?
+
+  rawAreaText    String? // exactly what the user typed, kept for audit even after relink
+  rawSubAreaText String?
+
+  fullAddressCache String // denormalized "clean master" display string, rebuilt on relink
+
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([entityType, entityId])
+  @@index([areaId])
+  @@index([subAreaId])
+  @@index([pincodeId])
+}
+
+model AuditLog {
+  id     String      @id @default(cuid())
+  action AuditAction
+
+  nodeId String?
+  node   AddressNode? @relation("AuditNode", fields: [nodeId], references: [id])
+
+  targetNodeId String?
+  targetNode   AddressNode? @relation("AuditTarget", fields: [targetNodeId], references: [id])
+
+  relinkedCount Int?
+  reason        String?
+  meta          Json?
+
+  performedBy String?
+  performedAt DateTime @default(now())
+
+  @@index([nodeId])
+  @@index([targetNodeId])
+}
