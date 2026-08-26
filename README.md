@@ -13,6 +13,15 @@ npm run dev                 # http://localhost:4000
 ```
 `DATABASE_URL` lives in `.env` (see `.env.example`).
 
+## AI-assisted duplicate detection (optional)
+Set `OPENAI_API_KEY` (and optionally `OPENAI_MODEL`, default `gpt-4o`) in `.env` to
+supplement the text-similarity matcher with a semantic check — it catches duplicates
+that read as totally different strings (a landmark name vs the official area name,
+e.g. "Rajiv Chowk Metro Area" vs "Connaught Place"), which edit-distance can never find.
+Only called from the explicit admin "Check duplicates" action (`src/services/aiMatch.service.ts`),
+never on every keystroke, so it adds no latency/cost to normal address entry. Leave the
+key blank and the app runs exactly as before — no code changes needed either way.
+
 ## Tests
 Integration tests run against a real, separate Postgres database
 (`acrebytes_address_test_db`, wiped clean before each run) covering matching/abbreviation

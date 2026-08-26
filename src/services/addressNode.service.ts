@@ -1,6 +1,7 @@
 import { AddressLevel, AddressNode, NodeStatus, Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
 import { normalizeKey, numberAwareSimilarity } from "../utils/normalize";
+import { findAiDuplicateCandidates } from "./aiMatch.service";
 
 const SUGGESTION_THRESHOLD = 0.72;
 const MAX_SUGGESTIONS = 5;
@@ -169,10 +170,22 @@ export async function findDuplicateCandidates(nodeId: string) {
       id: { not: node.id },
     },
   });
-  return siblings
-    .map((s) => ({ ...s, score: numberAwareSimilarity(node.normalizedKey, s.normalizedKey) }))
-    .filter((s) => s.score >= SUGGESTION_THRESHOLD)
-    .sort((a, b) => b.score - a.score);
+
+  const textMatches = siblings
+    .map((s) => ({ ...s, score: numberAwareSimilarity(node.normalizedKey, s.normalizedKey), aiSuggested: false }))
+    .filter((s) => s.score >= SUGGESTION_THRESHOLD);
+
+  // AI only looks at siblings text-matching already missed - no point spending a call
+  // re-confirming what the cheap matcher already found.
+  const alreadyCaught = new Set(textMatches.map((s) => s.id));
+  const aiIds = await findAiDuplicateCandidates(
+    node.name,
+    node.level,
+    siblings.filter((s) => !alreadyCaught.has(s.id)).map((s) => ({ id: s.id, name: s.name }))
+  );
+  const aiMatches = siblings.filter((s) => aiIds.includes(s.id)).map((s) => ({ ...s, score: 0, aiSuggested: true }));
+
+  return [...textMatches, ...aiMatches].sort((a, b) => b.score - a.score);
 }
 
 export async function adminSearchNodes(params: {

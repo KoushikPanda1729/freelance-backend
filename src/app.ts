@@ -7,6 +7,7 @@ import nodesRoutes from "./routes/nodes.routes";
 import userAddressRoutes from "./routes/userAddress.routes";
 import adminRoutes from "./routes/admin.routes";
 import searchRoutes from "./routes/search.routes";
+import chatRoutes from "./routes/chat.routes";
 
 export const app = express();
 
@@ -20,6 +21,7 @@ app.use("/api/nodes", nodesRoutes);
 app.use("/api/user-addresses", userAddressRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/search", searchRoutes);
+app.use("/api/chat", chatRoutes);
 
 app.use((req: Request, res: Response) => {
   res.status(404).json({ error: `No route for ${req.method} ${req.path}` });
